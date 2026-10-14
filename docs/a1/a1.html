@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assignment 1: Blinking Holiday Lights</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <p><a href="../index.html">Back to home</a></p>
+    <h1>Assignment 1: Blinking Holiday Lights</h1>
+    <p class="subtitle">
+      Three LEDs (red, green, blue) blink independently on an Arduino Uno in a
+      waltz-like pattern.
+    </p>
+
+    <h2>Schematic</h2>
+    <figure>
+      <img src="schematic.svg" />
+      <figcaption>
+        Each LED has its own series resistor and its own Arduino pin: D10 to red
+        (220 &Omega;), D11 to green (220 &Omega;), and D12 to blue (100
+        &Omega;). The three branches are in parallel, and the resistors share
+        a common ground wired to the Arduino's GND. Separate pins and resistors
+        let each LED be controlled independently.
+      </figcaption>
+    </figure>
+
+    <h2>Resistor calculation</h2>
+    <p>
+      The Arduino pin outputs 5 V when HIGH, the forward voltages
+      are 2.0 V (red), 2.0 V (green), and 3.3 V (blue), and the LEDs are rated
+      for about 20 mA. The Arduino limits are 40 mA per pin and 150 mA total.
+    </p>
+
+    <p>
+      <strong>Kirchhoff's voltage law</strong> around each branch gives V<sub
+        >pin</sub
+      >
+      - V<sub>R</sub> - V<sub>f</sub> = 0, so V<sub>R</sub> = 5 V -
+      V<sub>f</sub>. <strong>Ohm's law</strong> then gives R = V<sub>R</sub> /
+      I. Using the 20 mA LED rating as the maximum current gives the smallest
+      resistor allowed:
+    </p>
+
+    <table>
+      <tr>
+        <th>LED</th>
+        <th>V<sub>f</sub></th>
+        <th>V<sub>R</sub> = 5 - V<sub>f</sub></th>
+        <th>Minimum R at 20 mA</th>
+        <th>Resistor used</th>
+        <th>Current, I = V<sub>R</sub> / R</th>
+      </tr>
+      <tr>
+        <td>Red</td>
+        <td>2.0 V</td>
+        <td>3.0 V</td>
+        <td>3.0 / 0.020 = 150 &Omega;</td>
+        <td>220 &Omega;</td>
+        <td>3.0 / 220 = 13.6 mA</td>
+      </tr>
+      <tr>
+        <td>Green</td>
+        <td>2.0 V</td>
+        <td>3.0 V</td>
+        <td>3.0 / 0.020 = 150 &Omega;</td>
+        <td>220 &Omega;</td>
+        <td>3.0 / 220 = 13.6 mA</td>
+      </tr>
+      <tr>
+        <td>Blue</td>
+        <td>3.3 V</td>
+        <td>1.7 V</td>
+        <td>1.7 / 0.020 = 85 &Omega;</td>
+        <td>100 &Omega;</td>
+        <td>1.7 / 100 = 17.0 mA</td>
+      </tr>
+    </table>
+
+    <h2>Circuit</h2>
+    <figure>
+      <img
+        src="IMG_2492.jpeg"
+      />
+      <figcaption>
+        Arduino pin D10 connects to the red LED's anode (long leg), D11 to the green
+        LED's anode, and D12 to the blue LED's anode. Each LED's cathode
+        connects to a resistor: 220 &Omega; for red, 220 &Omega; for green,
+        and 100 &Omega; for blue. The other end of each resistor connects to the ground
+        rail, which is wired to the Arduino's GND.
+      </figcaption>
+    </figure>
+
+    <h2>Circuit in operation</h2>
+    <figure>
+      <img
+        src="IMG_2490.gif"
+      />
+      <figcaption>
+        Blue toggles every 300 ms, green every 600 ms, and red every 900 ms.
+      </figcaption>
+    </figure>
+
+    <h2>Firmware</h2>
+    <pre><code>// Number of LEDs in the circuit
+const int NUM_LEDS = 3;
+// Arduino pins connected to the red, green, and blue LEDs
+const int ledPins[NUM_LEDS] = {10, 11, 12};
+// Time in milliseconds each LED stays on or off before toggling
+const int intervals[NUM_LEDS] = {900, 600, 300};
+// Milliseconds counted so far for each LED
+int timers[NUM_LEDS] = {0, 0, 0};
+
+// the setup function runs once when you press reset or power the board
+void setup() {
+  // Step through every LED
+  for (int i = 0; i &lt; NUM_LEDS; i++) {
+    // Set this LED's pin as an output
+    pinMode(ledPins[i], OUTPUT);
+  }
+}
+
+// loop() runs over and over forever
+void loop() {
+  // Wait 1 millisecond so each pass of the loop counts as one tick
+  delay(1);
+  // Step through every LED
+  for (int i = 0; i &lt; NUM_LEDS; i++) {
+    // Add one millisecond to this LED's timer
+    timers[i]++;
+    // Check whether this LED's timer has reached its interval
+    if (timers[i] &gt;= intervals[i]) {
+      // Set the pin to the opposite of its current state
+      digitalWrite(ledPins[i], !digitalRead(ledPins[i]));
+      // Reset this LED's timer back to 0
+      timers[i] = 0;
+    }
+  }
+}</code></pre>
+    <p>
+      Each LED has its own timer that counts up one millisecond per loop pass.
+      When a timer reaches its LED's interval, the code flips that LED's pin and
+      resets the timer to 0. Because each LED has its own timer, they blink
+      independently, and the 1 ms <code>delay()</code> is short enough that it
+      does not block the other LEDs. Each timer resets before it passes 900, so
+      it never grows large.
+    </p>
+
+    <h2>Questions</h2>
+
+    <h3>1. Graph of voltage across each LED over time</h3>
+    <figure>
+      <img
+        src="voltage-graph.png"
+      />
+      <figcaption>
+        Each LED is a square wave. The voltage across an LED is about its
+        forward voltage while it is on (2.0 V for red, 2.0 V for green, 3.3 V
+        for blue) and 0 V while it is off. Each LED starts off and first turns
+        on after one interval. The periods are 1800 ms for red, 1200 ms for
+        green, and 600 ms for blue.
+      </figcaption>
+    </figure>
+
+    <h3>
+      2. How many LEDs could I blink independently, and how much current would
+      that draw?
+    </h3>
+    <p>
+      The total across all pins must stay under 150 mA.
+    </p>
+    <p>
+      My LEDs draw 13.6 to 17.0 mA each, so about 10 of them could be on at the
+      same time before reaching 150 mA. To run all 20 pins at once, each LED could
+      draw at most 150 / 20 = 7.5 mA. For a red LED that needs R = (5 - 2.0) /
+      0.0075 = 400 &Omega;, so a 400 &Omega; resistor gives 7.5 mA per LED and
+      20 &times; 7.5 = 150 mA total.
+    </p>
+
+    <h3>
+      3. How fast do I need to blink the LEDs until I can no longer tell they
+      are blinking?
+    </h3>
+    <p>
+      I could no longer see blinking at about 50 Hz (20 ms per cycle, and frequency = 1000 / cycle time (20ms) = 50 Hz). At slower speeds, around 20 to 30 Hz, I could
+      still see a flicker, and the LED looked steady once the speed went above about
+      50 Hz.
+    </p>
+
+    <h3>4. AI use</h3>
+    <p>
+      I used claude to help with the python code to generate the graph of the voltages.
+    </p>
+  </body>
+</html>
