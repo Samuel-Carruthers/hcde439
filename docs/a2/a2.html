@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assignment 2: Fade!</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <p><a href="../index.html">Back to home</a></p>
+    <h1>Assignment 2: Fade!</h1>
+    <p class="subtitle">
+      Three red LEDs and a button on an Arduino Uno. With the button released,
+      one LED is on. While the button is held, a second LED turns on and a third
+      LED fades up and down.
+    </p>
+
+    <h2>Schematic</h2>
+    <figure>
+      <img src="a2schematic.svg" alt="Schematic of the A2 circuit" />
+      <figcaption>
+        Each LED has its own series resistor and its own Arduino pin: D4 to the
+        idle LED, D5 to the fading LED, and D6 to the pressed LED, each with a
+        220 &Omega; resistor (R1 to R3). The resistors share a common ground
+        wired to the Arduino's GND. The button connects 5 V with D2 and a 10
+        k&Omega; pull-down resistor (R4) to ground.
+      </figcaption>
+    </figure>
+
+    <h2>LED resistor calculation</h2>
+
+    <p>
+      <strong>Kirchhoff's voltage law</strong> around each branch gives V<sub
+        >pin</sub
+      >
+      - V<sub>R</sub> - V<sub>f</sub> = 0, so V<sub>R</sub> = 5 V -
+      V<sub>f</sub>. <strong>Ohm's law</strong> then gives R = V<sub>R</sub> /
+      I. Using the 20 mA LED rating as the maximum current gives the smallest
+      resistor allowed:
+    </p>
+
+    <table>
+      <tr>
+        <th>LED</th>
+        <th>V<sub>f</sub></th>
+        <th>V<sub>R</sub> = 5 - V<sub>f</sub></th>
+        <th>Minimum R at 20 mA</th>
+        <th>Resistor used</th>
+        <th>Current, I = V<sub>R</sub> / R</th>
+      </tr>
+      <tr>
+        <td>Red (all three)</td>
+        <td>2.0 V</td>
+        <td>3.0 V</td>
+        <td>3.0 / 0.020 = 150 &Omega;</td>
+        <td>220 &Omega;</td>
+        <td>3.0 / 220 = 13.6 mA</td>
+      </tr>
+    </table>
+
+    <p>
+      I used 220 &Omega; because it is the next standard value above the 150
+      &Omega; minimum, and it is the same value I used for the red LED in A1.
+    </p>
+
+    <h2>Button resistor</h2>
+    <p>
+      When the button is open the 10 k&Omega; resistor connects pin D2 to GND, so
+      the input reads a clean LOW instead of floating and picking up noise. When
+      the button is pressed, 5 V reaches D2 and the pin reads HIGH, and the same
+      resistor limits the current from 5 V to GND:
+    </p>
+    <p>I = V / R = 5 V / 10,000 &Omega; = 0.5 mA</p>
+    <p>
+      This is small, so almost no power is wasted and the button and the 5 V
+      rail are protected. A much smaller value would draw more current every
+      time the button is pressed, and a much larger one would connect the pin to
+      GND less firmly.
+    </p>
+
+    <h2>Circuit</h2>
+    <figure>
+      <img src="a2circuit.jpeg" alt="Breadboard build of the A2 circuit" />
+      <figcaption>
+        Arduino pin D4 connects to the idle LED's anode (long leg), D5 to the
+        fading LED's anode, and D6 to the pressed LED's anode. Each LED's
+        cathode connects to a 220 &Omega; resistor, and the other end of each
+        resistor connects to the ground rail, which is wired to the Arduino's
+        GND. The button sits across the breadboard center gap, with 5 V on one
+        side and the D2 wire and the 10 k&Omega; resistor to ground on the
+        other. 
+      </figcaption>
+    </figure>
+
+    <h2>Circuit in operation</h2>
+    <figure>
+      <img src="a2demo.gif" alt="Animated demo of the A2 circuit" />
+      <figcaption>
+        When the button is open, the 10 k&Omega; resistor connects pin D2 to
+        GND, ensuring the input reads LOW instead of floating and picking up
+        electrical noise. When the button is pressed, 5 V reaches D2, causing
+        the input to read HIGH. The resistor also limits the current flowing
+        from 5 V to GND when the button is pressed: I = V / R = 5 V / 10,000
+        &Omega; = 0.5 mA This small current minimizes wasted power. A much
+        smaller resistance would allow more current to flow when the button is
+        pressed, while a much larger resistance could make the input more
+        susceptible to electrical noise.
+      </figcaption>
+    </figure>
+
+    <h2>Firmware</h2>
+    <pre><code>// Pin for the fading LED (pin 5 supports PWM)
+const int fadeLed = 5;
+// Pin for the LED that is on while the button is pressed
+const int pressedLed = 6;
+// Pin for the LED that is on while the button is not pressed
+const int idleLed = 4;
+// Pin the button is wired to
+const int buttonPin = 2;
+
+// setup() runs once when the board powers on
+void setup() {
+  // Set the fading LED pin as an output
+  pinMode(fadeLed, OUTPUT);
+  // Set the pressed LED pin as an output
+  pinMode(pressedLed, OUTPUT);
+  // Set the idle LED pin as an output
+  pinMode(idleLed, OUTPUT);
+  // Set the button pin as an input (external pull-down holds it LOW)
+  pinMode(buttonPin, INPUT);
+}
+
+// loop() runs over and over after setup()
+void loop() {
+  // Read the button: HIGH if pressed, LOW if not
+  int pressed = digitalRead(buttonPin);
+  // Turn the pressed LED on only while the button is held
+  digitalWrite(pressedLed, pressed);
+  // Turn the idle LED on only while the button is not held
+  digitalWrite(idleLed, !pressed);
+  // Keep the fading LED off unless the fade below runs
+  analogWrite(fadeLed, 0);
+
+  // Only fade the third LED if the button is pressed
+  if (pressed == HIGH) {
+    // Count brightness up from 0 to 255 in steps of 5
+    for (int brightness = 0; brightness &lt;= 255; brightness += 5) {
+      // Set the PWM duty cycle to the current brightness
+      analogWrite(fadeLed, brightness);
+      // Wait 30 ms so the dimming effect is visible
+      delay(30);
+    }
+    // Count brightness back down from 255 to 0 in steps of 5
+    for (int brightness = 255; brightness &gt;= 0; brightness -= 5) {
+      // Set the PWM duty cycle to the current brightness
+      analogWrite(fadeLed, brightness);
+      // Wait 30 ms so the dimming effect is visible
+      delay(30);
+    }
+  }
+}</code></pre>
+    <p>
+      Each pass through <code>loop()</code> reads the button with
+      <code>digitalRead()</code> and sets the idle and pressed LEDs with
+      <code>digitalWrite()</code>. While the button is held, two
+      <code>for</code> loops step the brightness from 0 to 255 and back to 0,
+      and <code>analogWrite()</code> turns each brightness value into a PWM duty
+      cycle on pin 5.
+    </p>
+
+    <h2>Questions</h2>
+
+    <h3>
+      1. Graph of voltage over time for analogWrite(led, 64), 128, and 255
+    </h3>
+    <figure>
+      <img src="voltage_vs_time.png" />
+      <figcaption>
+        The pin voltage is a square wave between 0 V and 5 V. 255 stays at 5 V,
+        128 is high for half of each period, and 64 is high for a quarter.
+      </figcaption>
+    </figure>
+    <p>
+      Pins 5 and 6 on the Uno run PWM at about 980 Hz, so the period is 1 / 980
+      Hz = 1.020 ms. The duty cycle is the analogWrite value divided by 255, the
+      high time is the duty cycle times the period, and the average voltage is
+      the duty cycle times 5 V.
+    </p>
+    <table>
+      <tr>
+        <th>analogWrite value</th>
+        <th>Duty cycle</th>
+        <th>High time per period</th>
+        <th>Average voltage</th>
+      </tr>
+      <tr>
+        <td>64</td>
+        <td>64 / 255 = 25.1%</td>
+        <td>0.251 &times; 1.020 ms = 0.256 ms</td>
+        <td>0.251 &times; 5 V = 1.25 V</td>
+      </tr>
+      <tr>
+        <td>128</td>
+        <td>128 / 255 = 50.2%</td>
+        <td>0.502 &times; 1.020 ms = 0.512 ms</td>
+        <td>0.502 &times; 5 V = 2.51 V</td>
+      </tr>
+      <tr>
+        <td>255</td>
+        <td>255 / 255 = 100%</td>
+        <td>1.020 ms (always high)</td>
+        <td>5 V</td>
+      </tr>
+    </table>
+    <p>
+      This is the voltage at the Arduino pin. The voltage across the LED itself
+      is lower when it is on (about 2 V) because the series resistor drops the
+      rest.
+    </p>
+
+    <h3>
+      2. Total current with all LEDs on, and battery life on a 1200 mAh battery
+    </h3>
+    <p>
+      Each LED draws 3.0 V / 220 &Omega; = 13.6 mA, and all three on is 3
+      &times; 13.6 mA = 40.9 mA. Each pin is under the 40 mA per pin limit, and
+      the total is under the 150 mA total limit, so the circuit is below the
+      Arduino limits.
+    </p>
+    <p>
+      Battery life = 1200 mAh / 40.9 mA = 29.3 hours. This counts only the LEDs.
+      The Arduino board itself also draws current, so the real runtime would be
+      shorter.
+    </p>
+
+    <h3>3. Measured voltage across an LED</h3>
+    <p>
+      1.99 V across the LED when it is on. The forward voltage I used for a red
+      LED is 2.0 V. The measured and theoretical values are nearly identical,
+      and the small difference is likely due to measurement error.
+    </p>
+
+    <h3>4. AI use</h3>
+    <p>
+      I used AI to help generate python code for the voltage vs time graph. Making graphs in python is
+      simple but time consuming and tedious, so being able to communicate the requirements in plain text is helpful
+    </p>
+  </body>
+</html>
