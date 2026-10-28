@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assignment 3: Input Output!</title>
+    <link rel="stylesheet" href="../style.css" />
+  </head>
+  <body>
+    <header>
+      <p><a href="../index.html">Back to home</a></p>
+      <h1>Assignment 3: Input Output!</h1>
+    </header>
+
+    <main>
+      <section>
+        <h2>Overview</h2>
+        <p>
+          I prototyped <strong>daylight-aware window blinds</strong> for a smart
+          home. A photoresistor in a voltage divider senses room brightness. A
+          servo acts as the blinds: open in bright light, closing as the room
+          dims, and fully shut once it is dark. An LED night light does the
+          opposite, glowing brighter as the room dims.
+        </p>
+      </section>
+
+      <section>
+        <h2>Schematic</h2>
+        <figure>
+          <img src="a3schematic.svg" />
+          <figcaption>
+            The photoresistor (R1) runs from 5V to A0, and a 10 kΩ resistor (R2)
+            runs from A0 to ground (see the calculation below for why 10 kΩ).
+            The servo's signal wire is on D9, with power from 5V and GND. The
+            LED is on D5 and reaches ground through a 220 Ω current-limiting
+            resistor.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2>Voltage divider calculation</h2>
+        <p>With the photoresistor as R1 and the fixed resistor as R2:</p>
+        <p><code>Vmeasure = 5 V &#215; R2 / (R1 + R2)</code></p>
+        <p>
+          A photoresistor is typically about 1 kΩ in bright light and about 100
+          kΩ in the dark. Choosing R2 as the geometric mean of those puts the
+          output in the middle of the 0 to 5 V range:
+        </p>
+        <p><code>R2 = &#8730;(1 kΩ &#215; 100 kΩ) = 10 kΩ</code></p>
+        <p>Expected values at A0 with R2 = 10 kΩ:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Condition</th>
+              <th>R1</th>
+              <th>Vmeasure</th>
+              <th>analogRead (V / 5 &#215; 1023)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Bright</td>
+              <td>1 kΩ</td>
+              <td>5 &#215; 10 / 11 = 4.55 V</td>
+              <td>930</td>
+            </tr>
+            <tr>
+              <td>Medium</td>
+              <td>10 kΩ</td>
+              <td>5 &#215; 10 / 20 = 2.50 V</td>
+              <td>512</td>
+            </tr>
+            <tr>
+              <td>Dark</td>
+              <td>100 kΩ</td>
+              <td>5 &#215; 10 / 110 = 0.45 V</td>
+              <td>93</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          My actual readings and the values chosen for the code, converted with
+          <code>V = reading / 1023 &#215; 5</code> and
+          <code>R1 = 10 kΩ &#215; (1023 / reading - 1)</code>:
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Value</th>
+              <th>analogRead</th>
+              <th>Vmeasure</th>
+              <th>R1</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Room light (measured)</td>
+              <td>442</td>
+              <td>2.16 V</td>
+              <td>13 kΩ</td>
+            </tr>
+            <tr>
+              <td>Map top (chosen)</td>
+              <td>440</td>
+              <td>2.15 V</td>
+              <td>13 kΩ</td>
+            </tr>
+            <tr>
+              <td>Dark threshold (chosen)</td>
+              <td>250</td>
+              <td>1.22 V</td>
+              <td>31 kΩ</td>
+            </tr>
+            <tr>
+              <td>Hand over sensor (measured)</td>
+              <td>231</td>
+              <td>1.13 V</td>
+              <td>34 kΩ</td>
+            </tr>
+            <tr>
+              <td>Map bottom (chosen)</td>
+              <td>190</td>
+              <td>0.93 V</td>
+              <td>44 kΩ</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>LED resistor calculation</h3>
+        <p>
+          A red LED drops about 2 V, so the resistor takes the other 3 V:
+          <code>I = (5 V - 2 V) / 220 Ω = 13.6 mA</code>. That is under the
+          LED's 20 mA rating and the Arduino pin's recommended 20 mA, and still
+          bright.
+        </p>
+      </section>
+
+      <section>
+        <h2>Circuit</h2>
+        <figure>
+          <img src="a3circuit.jpeg" />
+          <figcaption>
+            The photoresistor and 10 kΩ resistor
+            meet at the wire to A0. The servo's signal wire goes to D9, power to
+            5V, and ground to GND. D5 goes to the LED's long leg, the short leg
+            to the 220 Ω resistor, and the resistor to ground.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2>Firmware</h2>
+        <pre><code>// Include the Servo library so the servo can be controlled with angles
+#include &lt;Servo.h&gt;
+
+// Create a servo object that represents the blinds
+Servo blinds;
+// Reading below this counts as dark
+const int DARK_THRESHOLD = 250;
+// PWM pin for the night light LED
+const int LED_PIN = 5;
+
+void setup() {
+  // Start serial communication at 9600 baud
+  Serial.begin(9600);
+  // Connect the blinds servo object to its signal pin
+  blinds.attach(9);
+  // Set the night light pin as an output
+  pinMode(LED_PIN, OUTPUT);
+}
+
+void loop() {
+  // Read the divider voltage as a number from 0 to 1023
+  int reading = analogRead(A0);
+  // Map the usable range 190 to 440 to a servo angle (dark closes at 0, bright opens at 180)
+  int angle = map(reading, 190, 440, 0, 180);
+  // Keep the angle inside 0 to 180 in case a reading falls outside the mapped range
+  angle = constrain(angle, 0, 180);
+  // Map the same range to LED brightness, reversed so darker means brighter
+  int brightness = map(reading, 190, 440, 255, 0);
+  // Keep the brightness inside the 0 to 255 range analogWrite accepts
+  brightness = constrain(brightness, 0, 255);
+  // Check whether the room is dark enough to shut the blinds completely
+  if (reading &lt; DARK_THRESHOLD) {
+    // Close the blinds fully
+    angle = 0;
+    // Turn the night light fully on
+    brightness = 255;
+  }
+  // Move the blinds to the final angle
+  blinds.write(angle);
+  // Set the night light brightness with PWM
+  analogWrite(LED_PIN, brightness);
+  // Label the light reading on the serial monitor
+  Serial.print("Room light: ");
+  // Print the raw light reading
+  Serial.print(reading);
+  // Label the blinds angle
+  Serial.print(" | Blinds: ");
+  // Print the servo angle in degrees
+  Serial.print(angle);
+  // Label the night light brightness
+  Serial.print(" deg | Light: ");
+  // Print the brightness and end the line
+  Serial.println(brightness);
+}</code></pre>
+        <p>
+          Why these values (voltages and resistances are in the table above):
+        </p>
+        <ul>
+          <li>
+            <strong>440 (2.15 V):</strong> just under my room-light readings
+            (442 to 447), so normal room light opens the blinds fully.
+          </li>
+          <li>
+            <strong>250 (1.22 V):</strong> just above where the reading settles
+            with my pick over the sensor (231 to 245), so covering the sensor
+            always triggers it. At 250 the mapped angle is 43°, so the blinds
+            snap shut from there.
+          </li>
+          <li>
+            <strong>190 (0.93 V):</strong> below every reading I recorded, so
+            <code>map()</code> alone never closes the blinds. Closing is left to
+            the <code>if</code> statement.
+          </li>
+          <li><strong>0 to 180:</strong> the servo's angle range.</li>
+          <li>
+            <strong>255 to 0:</strong> <code>analogWrite()</code> takes 0 to 255
+            (8-bit). The range is reversed so a darker room gives a brighter
+            LED.
+          </li>
+        </ul>
+        <p>
+          The servo uses the Servo library instead of
+          <code>analogWrite()</code> because it needs 50 Hz pulses and the Uno's
+          PWM runs at 490 or 980 Hz.
+        </p>
+      </section>
+
+      <section>
+        <h2>Circuit operation</h2>
+        <figure>
+          <img src="a3demo.gif" />
+          <figcaption>
+            Covering the photoresistor lowers the A0 voltage. The servo swings
+            toward closed while the LED fades up, and once the reading drops
+            below 250 the blinds shut and the LED goes fully on.
+          </figcaption>
+        </figure>
+        <h3>Serial monitor output</h3>
+        <figure>
+          <img src="a3output.png" />
+          <figcaption>
+            Output while covering the sensor: 180° with the LED off in room
+            light (442 to 447), down to 0° with the LED at 255 below 250.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2>Additional questions</h2>
+
+        <h3>1. Can the variable resistor be R1 or R2?</h3>
+        <p>
+          Either works. Swapping them only flips the direction of the response:
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Setup</th>
+              <th>Bright (1 kΩ)</th>
+              <th>Dark (100 kΩ)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Photoresistor as R1</td>
+              <td>5 &#215; 10 / (1 + 10) = 4.55 V</td>
+              <td>5 &#215; 10 / (100 + 10) = 0.45 V</td>
+            </tr>
+            <tr>
+              <td>Photoresistor as R2</td>
+              <td>5 &#215; 1 / (10 + 1) = 0.45 V</td>
+              <td>5 &#215; 100 / (10 + 100) = 4.55 V</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          Both span 0.45 V to 4.55 V. I used R1 so brighter light gives a bigger
+          reading.
+        </p>
+
+        <h3>2. Voltage at V-measure over time</h3>
+        <figure>
+          <img src="voltage-graph.png" />
+          <figcaption>
+            Voltage at A0 for the serial output above, using
+            <code>V = reading / 1023 &#215; 5</code>. Time is estimated from the
+            baud rate: the sketch has no delay, so each line takes about 50 ms
+            to send at 9600 baud. The voltage falls from 2.18 V in room light to
+            below the 1.22 V threshold as my hand covers the sensor.
+          </figcaption>
+        </figure>
+
+        <h3>3. What changes with 10-bit PWM and a 16-bit ADC?</h3>
+        <p>
+          A 16-bit ADC reads 0 to 65535 instead of 0 to 1023, so every input
+          value scales by 65535 / 1023 ≈ 64: 190 to 440 becomes 12,170 to
+          28,190, and the threshold of 250 becomes 16,020. The reading becomes a
+          <code>long</code>, since an <code>int</code> on the Uno only goes up
+          to 32,767. 10-bit PWM takes 0 to 1023 instead of 0 to 255, so the
+          LED's range becomes 1023 to 0. The servo's output stays 0 to 180
+          because <code>blinds.write()</code> takes degrees. Changed lines:
+        </p>
+        <pre><code>long reading = analogRead(A0);
+int angle = map(reading, 12170, 28190, 0, 180);
+int brightness = map(reading, 12170, 28190, 1023, 0);
+brightness = constrain(brightness, 0, 1023);
+if (reading &lt; 16020) {
+  brightness = 1023;
+}</code></pre>
+      </section>
+    </main>
+  </body>
+</html>
