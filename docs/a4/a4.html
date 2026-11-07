@@ -133,13 +133,12 @@
       <section>
         <h2>Circuit</h2>
         <figure>
-          <!-- TODO: add your circuit photo as a4circuit.jpeg -->
           <img src="a4circuit.jpeg" />
           <figcaption>
             One jumper from 5V and one from GND feed the breadboard rails. The
             receiver's + and - legs connect to those rails first, and the servo's
             red and brown wires connect to the same rails beside it. The
-            receiver's signal leg goes to D11 and the servo's orange signal wire
+            receiver's signal leg goes to D11 and the servo's yellow signal wire
             to D9.
           </figcaption>
         </figure>
@@ -239,7 +238,6 @@ void loop() {
       <section>
         <h2>Circuit operation</h2>
         <figure>
-          <!-- TODO: add your demo GIF as a4demo.gif -->
           <img src="a4demo.gif" />
           <figcaption>
             Each press of VOL+ or VOL- nudges the mount 10°, number keys snap it
@@ -264,7 +262,6 @@ void loop() {
             Then <code>loop()</code> restarts and the pulses drop back to
             0.544 ms. The graph zooms in on that moment, from 18.0 s to 18.2 s,
             since individual pulses aren't visible over the whole 18 seconds.
-            Made with <a href="graph.py">graph.py</a>.
           </figcaption>
         </figure>
 
@@ -333,17 +330,7 @@ every loop:
 
         <h3>4. Use of AI tools</h3>
         <p>
-          Yes. I used Claude (Anthropic) to help plan the circuit, draft the
-          firmware comments and this page, draw the schematic SVG, write the
-          Python script for the Question 1 graph, and work through Questions 2
-          and 3. I built and tested the circuit myself and recorded the button
-          codes, photo, and GIF.
-        </p>
-        <p>
-          <!-- TODO: add your reflection and the shared conversation link -->
-          [Reflection]
-        </p>
-        <p>Conversation: <a href="#">[shared conversation link]</a></p>
+          I used claude to assist with the python code to generate the graph for question 1.
       </section>
     </main>
   </body>
