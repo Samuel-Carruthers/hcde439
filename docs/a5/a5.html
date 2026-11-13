@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Assignment 5: High(er) Voltage and Transistors!</title>
+    <link rel="stylesheet" href="../style.css" />
+  </head>
+  <body>
+    <header>
+      <p><a href="../index.html">Back to home</a></p>
+      <h1>Assignment 5: High(er) Voltage and Transistors!</h1>
+    </header>
+
+    <main>
+      <section>
+        <h2>Overview</h2>
+        <p>
+          A DC fan motor spins faster the closer my hand gets to an ultrasonic
+          sensor. The motor runs on a separate 12 V wall adapter, and an
+          N-MOSFET lets the Arduino control it.
+        </p>
+        <ol>
+          <li>The HC-SR04 sensor measures my hand's distance, read with the <code>NewPing</code> library.</li>
+          <li>The Arduino turns the distance into a speed and sends it to the MOSFET with <code>analogWrite()</code> on pin 11.</li>
+          <li>The IRLZ44N MOSFET switches the motor's 12 V power on and off very fast. The longer it stays on in each cycle, the faster the motor spins.</li>
+        </ol>
+        <p>
+          The Arduino runs on USB (logic power) and the motor runs on the
+          adapter (load power). The two circuits share only ground.
+        </p>
+      </section>
+
+      <section>
+        <h2>Schematic</h2>
+        <figure>
+          <img src="a5schematic.svg" />
+          <figcaption>
+            Sensor: 5V, GND, Trig on D10, Echo on D9. Gate: D11 connects to the
+            MOSFET's gate (pin 1) through a 220 Ω resistor, and a 10 kΩ
+            pull-down connects the gate to ground. Motor: the motor and the
+            1N4007 flyback diode both connect between +12 V and the MOSFET's
+            drain (pin 2), with the diode's cathode toward +12 V. Ground: the
+            sensor, the pull-down, the MOSFET's source (pin 3), and the
+            adapter's − all connect to the Arduino's GND.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2>Circuit</h2>
+        <figure>
+          <img src="a5circuit.jpeg" />
+          <figcaption>
+            Wired the same as the schematic. The IRLZ44N's legs, with the label
+            facing me, are gate, drain, source. The diode's stripe is on the
+            +12 V side. Every ground, including the adapter's −, is on the rail
+            wired to the Arduino's GND.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2>Calculations</h2>
+
+        <h3>Values from datasheets</h3>
+        <table>
+          <thead>
+            <tr><th>Part</th><th>Value</th><th>Source</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>DC motor</td>
+              <td>3 to 6 V; 80 mA with no load and 1.2 A stalled, both at 6 V</td>
+              <td>
+                I used
+                an equivalent 3 to 6 V mini DC motor:
+                <a href="https://www.mouser.com/catalog/specsheets/Soldered_101172%20mini%20dc%20motor.pdf">Soldered 101171</a>
+              </td>
+            </tr>
+            <tr>
+              <td>IRLZ44N MOSFET</td>
+              <td>
+                47 A max; turns on at 1 to 2 V; 0.025 Ω when on (5 V gate);
+                55 V max
+              </td>
+              <td><a href="https://www.infineon.com/assets/row/public/documents/24/49/infineon-irlz44n-datasheet-en.pdf">Infineon IRLZ44N</a></td>
+            </tr>
+            <tr>
+              <td>1N4007 diode</td>
+              <td>1 A average, 30 A surge; 1.1 V drop at 1 A</td>
+              <td><a href="https://www.onsemi.com/pdf/datasheet/1n4001-d.pdf">onsemi 1N4007</a></td>
+            </tr>
+            <tr>
+              <td>HC-SR04 sensor</td>
+              <td>15 mA; 2 cm minimum range; 60 ms between readings</td>
+              <td><a href="https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf">HC-SR04</a></td>
+            </tr>
+            <tr>
+              <td>Arduino Uno pin</td>
+              <td>40 mA absolute max; PWM on pin 11 runs at 490 Hz</td>
+              <td><a href="https://www.microchip.com/en-us/product/ATmega328P">ATmega328P datasheet</a>; <a href="https://docs.arduino.cc/language-reference/en/functions/analog-io/analogWrite/">Arduino <code>analogWrite()</code> reference</a></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>1. Keeping the motor at 6 V</h3>
+        <p>
+          <code>analogWrite()</code> takes a duty from 0 to 255, where 255 means
+          on 100% of the time. The motor responds to the average voltage,
+          duty / 255 × 12 V, so I solved for the duties that give the motor's
+          rated 3 V and 6 V.
+        </p>
+        <table>
+          <thead>
+            <tr><th>What</th><th>Calculation</th><th>Result</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>MAX_DUTY</td><td>6 V / 12 V × 255 = 127.5, rounded down to 127</td><td>127 / 255 × 12 V = 5.98 V, never above the motor's 6 V max</td></tr>
+            <tr><td>MIN_DUTY</td><td>3 V / 12 V × 255 = 63.75, rounded up to 64</td><td>64 / 255 × 12 V = 3.01 V, never below the motor's 3 V min</td></tr>
+          </tbody>
+        </table>
+
+        <h3>2. Gate resistors</h3>
+        <p>
+          The 220 Ω protects pin 11 from the current rush when the gate charges.
+          The 10 kΩ holds the gate at 0 V before <code>pinMode()</code> runs,
+          so the motor can't turn on during reset.
+        </p>
+        <table>
+          <thead>
+            <tr><th>What</th><th>Calculation</th><th>Result</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Current rush into the gate</td><td>5 V / 220 Ω</td><td>22.7 mA, under the pin's 40 mA max</td></tr>
+            <tr><td>Gate voltage when pin 11 is HIGH</td><td>5 V × 10,000 / (220 + 10,000)</td><td>4.89 V, above the 2 V needed to turn on</td></tr>
+            <tr><td>Steady current from pin 11</td><td>5 V / (220 + 10,000) Ω</td><td>0.49 mA</td></tr>
+          </tbody>
+        </table>
+
+        <h3>3. Motor current through the MOSFET</h3>
+        <p>
+          The motor's worst case is when it's stalled. Its resistance comes
+          from the datasheet's stall rating, and the highest current flows
+          during each 12 V pulse.
+        </p>
+        <table>
+          <thead>
+            <tr><th>What</th><th>Calculation</th><th>Result</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Motor resistance</td><td>6 V / 1.2 A</td><td>5 Ω</td></tr>
+            <tr><td>Peak current (stalled, during a 12 V pulse)</td><td>12 V / 5 Ω</td><td>2.4 A</td></tr>
+            <tr><td>Share of the MOSFET's limit</td><td>2.4 A / 47 A</td><td>5%</td></tr>
+            <tr><td>Voltage across the MOSFET when on</td><td>2.4 A × 0.025 Ω</td><td>0.06 V</td></tr>
+          </tbody>
+        </table>
+        <p>
+          In normal use the fan isn't stalled, so the current is between the
+          80 mA no-load and 1.2 A stall ratings, far below the 47 A limit.
+        </p>
+
+        <h3>4. Flyback diode</h3>
+        <p>
+          When the MOSFET turns off, the motor's coil keeps pushing current.
+          The diode carries it back through the motor, so the drain voltage
+          can't spike.
+        </p>
+        <table>
+          <thead>
+            <tr><th>What</th><th>Calculation</th><th>Result</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Drain voltage at switch-off</td><td>12 V + 1.1 V</td><td>13.1 V, under the MOSFET's 55 V max</td></tr>
+            <tr><td>Average diode current (stalled)</td><td>1.2 A × (1 − 127 / 255)</td><td>0.6 A, under the 1 A rating</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Expected values at key points</h3>
+        <table>
+          <thead>
+            <tr><th>Point</th><th>Voltage</th><th>Current</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>D11</td><td>0 or 5 V, 490 Hz</td><td>22.7 mA rush, 0.49 mA steady</td></tr>
+            <tr><td>MOSFET gate</td><td>0 or 4.89 V</td><td>≈ 0 A steady (the gate is insulated)</td></tr>
+            <tr><td>MOSFET drain</td><td>≤ 0.06 V on, 13.1 V at switch-off</td><td>Motor current, ≤ 2.4 A peak</td></tr>
+            <tr><td>Motor (average)</td><td>0, or 3.01 to 5.98 V</td><td>80 mA to 1.2 A</td></tr>
+            <tr><td>HC-SR04 VCC</td><td>5 V</td><td>15 mA</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Firmware</h2>
+        <pre><code>// Include the NewPing library
+#include &lt;NewPing.h&gt;
+
+// Pin connected to the sensor's Trig pin
+const int TRIG_PIN = 10;
+// Pin connected to the sensor's Echo pin
+const int ECHO_PIN = 9;
+// PWM pin connected to the MOSFET gate through the 220 ohm resistor
+const int GATE_PIN = 11;
+// Closest distance used, in cm (full speed without touching the sensor's 2 cm minimum)
+const int MIN_CM = 5;
+// Farthest distance measured, in cm (a short hand-wave range above the sensor)
+const int MAX_CM = 20;
+// Lowest duty sent to the motor (3.01 V, the motor's 3 V min)
+const int MIN_DUTY = 64;
+// Highest duty sent to the motor (5.98 V, the motor's 6 V max)
+const int MAX_DUTY = 127;
+
+// Create the sensor object with its Trig pin, Echo pin, and max distance
+NewPing sonar(TRIG_PIN, ECHO_PIN, MAX_CM);
+
+// Run once at startup
+void setup() {
+  // Start serial communication at 9600 baud
+  Serial.begin(9600);
+  // Set the gate pin to OUTPUT: it changes from a high-impedance input to an output driving LOW (0 V)
+  pinMode(GATE_PIN, OUTPUT);
+  // Set the gate pin's duty to 0 so the motor starts off
+  analogWrite(GATE_PIN, 0);
+}
+
+// Run repeatedly after setup
+void loop() {
+  // Measure the distance in cm (0 if nothing is within MAX_CM)
+  int cm = sonar.ping_cm();
+  // Set the duty to 0 (motor off)
+  int duty = 0;
+  // Check whether something is in range
+  if (cm &gt; 0) {
+    // Limit the distance to between MIN_CM and MAX_CM
+    cm = constrain(cm, MIN_CM, MAX_CM);
+    // Convert the distance to a duty: MIN_CM gives MAX_DUTY, MAX_CM gives MIN_DUTY
+    duty = map(cm, MIN_CM, MAX_CM, MAX_DUTY, MIN_DUTY);
+  }
+  // Send the duty to the MOSFET gate as a PWM signal
+  analogWrite(GATE_PIN, duty);
+  // Print a label for the distance
+  Serial.print("Distance (cm): ");
+  // Print the distance
+  Serial.print(cm);
+  // Print a label for the duty
+  Serial.print(" | Duty: ");
+  // Print the duty and start a new line
+  Serial.println(duty);
+  // Wait 60 ms before the next measurement (the HC-SR04's minimum time between readings)
+  delay(60);
+}</code></pre>
+      </section>
+
+      <section>
+        <h2>Circuit operation</h2>
+        <figure>
+          <img src="a5demo.gif" />
+          <figcaption>
+            With no hand within 20 cm the fan is off. Moving my hand closer
+            speeds it up, reaching full speed at 5 cm.
+          </figcaption>
+        </figure>
+      </section>
+
+      <section>
+        <h2>Additional questions</h2>
+
+        <h3>1. Maximum current between pins 2 and 3 of the IRLZ44N</h3>
+        <p>
+          Pin 2 is the drain and pin 3 is the source. The datasheet's absolute
+          maximum drain current is <strong>47 A</strong> continuous (case at
+          25 °C), 33 A continuous (case at 100 °C), and 160 A in short pulses.
+        </p>
+
+        <h3>2. Arduino, DC motor, and flyback diode</h3>
+        <figure>
+          <img src="a5-q2schematic.svg" />
+          <figcaption>
+            The motor driver from my circuit without the sensor, built from the
+            parts below.
+          </figcaption>
+        </figure>
+        <table>
+          <thead>
+            <tr><th>Component</th><th>Part</th><th>Datasheet</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Microcontroller</td><td>Arduino Uno R3</td><td><a href="https://docs.arduino.cc/resources/datasheets/A000066-datasheet.pdf">Arduino A000066</a></td></tr>
+            <tr><td>DC motor</td><td>Soldered 101171, 3 to 6 V</td><td><a href="https://www.mouser.com/catalog/specsheets/Soldered_101172%20mini%20dc%20motor.pdf">Soldered mini DC motor</a></td></tr>
+            <tr><td>Flyback diode</td><td>1N4007</td><td><a href="https://www.onsemi.com/pdf/datasheet/1n4001-d.pdf">onsemi 1N4001 to 1N4007</a></td></tr>
+            <tr><td>Transistor</td><td>IRLZ44N</td><td><a href="https://www.infineon.com/assets/row/public/documents/24/49/infineon-irlz44n-datasheet-en.pdf">Infineon IRLZ44N</a></td></tr>
+          </tbody>
+        </table>
+        <p>
+          These are the same parts as my main circuit, so calculations 1 to 4
+          above apply.
+        </p>
+
+        <h3>3. Two motors with the L293D</h3>
+        <figure>
+          <img src="a5-q3schematic.svg" />
+          <figcaption>
+            Pin numbers are in gray. The enable pins (1, 9) connect to PWM pins
+            D5 and D6 for speed, and the inputs (2, 7, 10, 15) connect to D7,
+            D8, D4, and D2 for direction. Motor A connects across outputs 1Y
+            and 2Y, and motor B across 3Y and 4Y. VCC1 (16) gets 5V from the
+            Arduino and VCC2 (8) gets 12 V from the adapter. The L293D's ground
+            pins (4, 5, 12, 13) and the adapter's − connect to the Arduino's
+            GND. The L293D has built-in flyback diodes.
+          </figcaption>
+        </figure>
+        <p>
+          A motor spins one way when its first input is HIGH and its second is
+          LOW, and the other way when they are swapped. Both LOW stops it.
+        </p>
+        <pre><code>EN_A = 5, IN1 = 7, IN2 = 8      // motor A pins
+EN_B = 6, IN3 = 4, IN4 = 2      // motor B pins
+
+setup() {
+  pinMode(EN_A, IN1, IN2, EN_B, IN3, IN4, OUTPUT)
+  digitalWrite(EN_A, EN_B, HIGH)   // turn both motors' channels on
+}
+
+loop() {
+  // both forward
+  digitalWrite(IN1, HIGH)  digitalWrite(IN2, LOW)
+  digitalWrite(IN3, HIGH)  digitalWrite(IN4, LOW)
+  delay(2000)  // 2 seconds
+
+  // stop
+  digitalWrite(IN1, IN2, IN3, IN4, LOW)
+  delay(500)   // half a second
+
+  // both back
+  digitalWrite(IN1, LOW)   digitalWrite(IN2, HIGH)
+  digitalWrite(IN3, LOW)   digitalWrite(IN4, HIGH)
+  delay(2000)  // 2 seconds
+
+  // stop
+  digitalWrite(IN1, IN2, IN3, IN4, LOW)
+  delay(500)   // half a second
+
+  // A forward, B back
+  digitalWrite(IN1, HIGH)  digitalWrite(IN2, LOW)
+  digitalWrite(IN3, LOW)   digitalWrite(IN4, HIGH)
+  delay(2000)  // 2 seconds
+
+  // stop
+  digitalWrite(IN1, IN2, IN3, IN4, LOW)
+  delay(500)   // half a second
+
+  // A back, B forward
+  digitalWrite(IN1, LOW)   digitalWrite(IN2, HIGH)
+  digitalWrite(IN3, HIGH)  digitalWrite(IN4, LOW)
+  delay(2000)  // 2 seconds
+
+  // stop
+  digitalWrite(IN1, IN2, IN3, IN4, LOW)
+  delay(500)   // half a second
+}</code></pre>
+      </section>
+    </main>
+  </body>
+</html>
