@@ -26,6 +26,7 @@ function draw() {
   let y = map(Number(arr[1]), 512, 1023, 0, windowHeight);
   let diameter = map(Number(arr[2]), 512, 1023, MIN_DIAMETER, MAX_DIAMETER);
 
+  background("white"); // Clear the background each frame
   // Draw a circle using our readings
   circle(x, y, diameter);
 }
